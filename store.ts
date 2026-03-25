@@ -1,8 +1,54 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 import { Question, QuestionPackage, Tags, UserAttempt, AppState } from './types';
 import { INITIAL_TAGS, INITIAL_QUESTIONS, INITIAL_PACKAGES } from './constants';
+
+// Converte options do formato do banco { "A": "texto", "B": "texto" }
+// para o formato esperado pelo app [{ id: "a", label: "A", text: "texto" }]
+const parseQuestion = (q: any): Question => {
+  let raw: any = q.options;
+
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = {}; }
+  }
+
+  let options: any[];
+
+  if (Array.isArray(raw)) {
+    if (raw.length > 0 && raw[0]?.text !== undefined) {
+      options = raw; // já no formato correto
+    } else {
+      options = raw.map((text: string, i: number) => ({
+        id: String.fromCharCode(97 + i),
+        label: String.fromCharCode(65 + i),
+        text: String(text),
+      }));
+    }
+  } else if (raw && typeof raw === 'object') {
+    // Formato banco: { "A": "texto", "B": "texto" }
+    options = Object.entries(raw).map(([label, text]) => ({
+      id: label.toLowerCase(),
+      label: label.toUpperCase(),
+      text: String(text),
+    }));
+  } else {
+    options = [];
+  }
+
+  // Normaliza correctOptionId para minúsculo (banco tem "A", app usa "a")
+  const correctOptionId = q.correctOptionId
+    ? q.correctOptionId.toLowerCase()
+    : '';
+
+  return { ...q, options, correctOptionId };
+};
+
+const parsePackage = (p: any): QuestionPackage => ({
+  ...p,
+  questionIds: typeof p.questionIds === 'string'
+    ? JSON.parse(p.questionIds)
+    : (Array.isArray(p.questionIds) ? p.questionIds : []),
+});
 
 export function useStorage() {
   const [db, setDb] = useState<AppState>({
@@ -36,8 +82,12 @@ export function useStorage() {
       ]);
 
       setDb({
-        questions: (qRes.data && qRes.data.length > 0) ? qRes.data : INITIAL_QUESTIONS,
-        packages: (pRes.data && pRes.data.length > 0) ? pRes.data : INITIAL_PACKAGES,
+        questions: (qRes.data && qRes.data.length > 0)
+          ? qRes.data.map(parseQuestion)
+          : INITIAL_QUESTIONS,
+        packages: (pRes.data && pRes.data.length > 0)
+          ? pRes.data.map(parsePackage)
+          : INITIAL_PACKAGES,
         attempts: aRes.data || [],
         tags: tData || INITIAL_TAGS
       });
@@ -62,7 +112,7 @@ export function useStorage() {
   const addQuestion = async (q: Question) => {
     const { error } = await supabase.from('questions').insert([q]);
     if (error) return false;
-    setDb(prev => ({ ...prev, questions: [q, ...prev.questions] }));
+    setDb(prev => ({ ...prev, questions: [parseQuestion(q), ...prev.questions] }));
     return true;
   };
 
@@ -71,7 +121,7 @@ export function useStorage() {
     if (error) return false;
     setDb(prev => ({
       ...prev,
-      questions: prev.questions.map(item => item.id === q.id ? q : item)
+      questions: prev.questions.map(item => item.id === q.id ? parseQuestion(q) : item)
     }));
     return true;
   };
@@ -92,7 +142,7 @@ export function useStorage() {
 
   const addPackage = async (p: QuestionPackage) => {
     const { error } = await supabase.from('packages').insert([p]);
-    if (!error) setDb(prev => ({ ...prev, packages: [p, ...prev.packages] }));
+    if (!error) setDb(prev => ({ ...prev, packages: [parsePackage(p), ...prev.packages] }));
   };
 
   const addAttempt = async (a: UserAttempt) => {
@@ -101,16 +151,16 @@ export function useStorage() {
     setDb(prev => ({ ...prev, attempts: [...prev.attempts, a] }));
   };
 
-  return { 
-    db, 
-    loading, 
+  return {
+    db,
+    loading,
     connectionStatus,
-    addQuestion, 
+    addQuestion,
     updateQuestion,
-    deleteQuestion, 
-    updateTags, 
-    addPackage, 
-    addAttempt, 
-    refresh: syncWithBackend 
+    deleteQuestion,
+    updateTags,
+    addPackage,
+    addAttempt,
+    refresh: syncWithBackend
   };
 }
