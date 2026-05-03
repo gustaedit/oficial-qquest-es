@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Shield, Lock, ChevronRight, Mail, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Shield, Lock, ChevronRight, Mail, Loader2, RefreshCw, AlertCircle, UserPlus, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface AuthProps {
@@ -11,6 +10,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // Novo Estado
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,78 +19,98 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     setError(null);
 
+    // Validação de Confirmação de Senha[cite: 10]
+    if (!isLogin && password !== confirmPassword) {
+      setError("DIVERGÊNCIA DE DADOS: As chaves de acesso não conferem.");
+      setLoading(false);
+      return;
+    }
+
+    if (!isLogin && password.length < 6) {
+      setError("SEGURANÇA FRACA: A chave deve ter no mínimo 6 caracteres.");
+      setLoading(false);
+      return;
+    }
+
     try {
       if (isLogin) {
-        const { error: loginError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
         onLoginSuccess();
       } else {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+        const { error: signUpError } = await supabase.auth.signUp({ email, password });
         if (signUpError) throw signUpError;
-        alert("Conta criada! Verifique seu e-mail se necessário ou faça login.");
+        alert("SOLICITAÇÃO ENVIADA: Verifique seu e-mail para validar as credenciais.");
         setIsLogin(true);
       }
     } catch (err: any) {
-      setError(err.message || "Erro de autenticação.");
+      setError(err.message || "FALHA NA OPERAÇÃO: Comando central não responde.");
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Background Decor */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-ba-blue/10 rounded-full blur-[120px]" />
+  const themeColor = isLogin ? 'bg-primary' : 'bg-cyan-500';
+  const themeText = isLogin ? 'text-primary' : 'text-cyan-400';
 
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center px-4 relative overflow-hidden transition-colors duration-500">
+      
       <div className="max-w-md w-full animate-in fade-in zoom-in-95 duration-700 relative z-10">
-        <div className="text-center mb-12">
-          <div className="inline-block p-5 bg-primary text-black rounded-[2rem] shadow-[0_0_50px_rgba(250,204,21,0.3)] mb-8">
-            <Shield className="w-12 h-12 stroke-[2.5px]" />
+        <div className="text-center mb-10">
+          <div className={`inline-block p-5 text-black rounded-[2rem] shadow-2xl transition-all duration-500 ${themeColor} mb-8`}>
+            {isLogin ? <Shield className="w-12 h-12 stroke-[2.5px]" /> : <UserPlus className="w-12 h-12 stroke-[2.5px]" />}
           </div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter italic text-white leading-none">Acesso Tático</h1>
-          <p className="text-white/30 text-[10px] font-black uppercase tracking-[0.4em] mt-4 leading-relaxed">
-            {isLogin ? 'Autenticação de Operador' : 'Cadastro de Novo Recruta'}
-          </p>
+          <h1 className="text-4xl font-black uppercase italic text-white leading-none">
+            {isLogin ? 'Acesso Tático' : 'Recrutamento'}
+          </h1>
         </div>
 
-        <form onSubmit={handleSubmit} className="glass-card !bg-white/[0.03] p-8 md:p-10 space-y-6 border-white/10">
+        <form onSubmit={handleSubmit} className="glass-card !bg-white/[0.03] p-8 md:p-10 space-y-5 border-white/10 relative overflow-hidden">
+          
           <div className="space-y-4">
+            {/* Campo E-mail */}
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4">Identificação (E-mail)</label>
-              <div className="relative">
-                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                <input 
-                  type="email"
-                  placeholder="EX: OPERADOR@MISSÃO.COM"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full bg-black/50 border border-white/10 p-5 pl-14 text-xs font-black uppercase tracking-widest text-white outline-none focus:border-primary transition-all rounded-2xl"
-                />
-              </div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4">Identificação</label>
+              <input 
+                type="email"
+                placeholder="OPERADOR@MISSÃO.COM"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-black/50 border border-white/10 p-5 pl-6 text-xs font-black uppercase text-white outline-none focus:border-white/40 rounded-2xl transition-all"
+              />
             </div>
 
+            {/* Campo Senha */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4">Chave de Acesso</label>
-              <div className="relative">
-                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+              <input 
+                type="password"
+                placeholder="********"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-black/50 border border-white/10 p-5 pl-6 text-xs font-black uppercase text-white outline-none focus:border-white/40 rounded-2xl transition-all"
+              />
+            </div>
+
+            {/* Campo de Confirmação (Aparece apenas no Cadastro) */}
+            {!isLogin && (
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <label className="text-[10px] font-black uppercase tracking-widest text-cyan-400/50 ml-4 flex items-center gap-2">
+                  <ShieldAlert className="w-3.5 h-3.5" /> Confirmar Chave
+                </label>
                 <input 
                   type="password"
-                  placeholder="SUA SENHA"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="DIGITE NOVAMENTE"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full bg-black/50 border border-white/10 p-5 pl-14 text-xs font-black uppercase tracking-widest text-white outline-none focus:border-primary transition-all rounded-2xl"
+                  className="w-full bg-black/50 border border-cyan-500/20 p-5 pl-6 text-xs font-black uppercase text-white outline-none focus:border-cyan-500/50 rounded-2xl transition-all"
                 />
               </div>
-            </div>
+            )}
           </div>
 
           {error && (
@@ -100,30 +120,32 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full py-6 bg-primary text-black font-black uppercase tracking-[0.3em] rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isLogin ? 'Engajar Sistema' : 'Criar Credencial'} 
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <div className="space-y-4 pt-2">
+            <button 
+              type="submit"
+              disabled={loading}
+              className={`w-full py-6 text-black font-black uppercase tracking-[0.3em] rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 ${themeColor} hover:brightness-110 active:scale-95 disabled:opacity-50`}
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isLogin ? 'Engajar' : 'Sintetizar'} 
+              <ChevronRight className="w-5 h-5" />
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setIsLogin(!isLogin)}
-            className="w-full text-center text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-primary transition-colors flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-3 h-3" /> {isLogin ? 'Ainda não é membro? Cadastre-se' : 'Já possui acesso? Volte ao Login'}
-          </button>
+            <button 
+              type="button"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError(null);
+                setConfirmPassword('');
+              }}
+              className="w-full p-4 border border-white/5 rounded-2xl hover:bg-white/[0.02] transition-all flex flex-col items-center gap-2"
+            >
+              <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${themeText}`}>
+                <RefreshCw className="w-3 h-3" /> 
+                {isLogin ? 'SOLICITAR INGRESSO' : 'VOLTAR AO TERMINAL'}
+              </div>
+            </button>
+          </div>
         </form>
-
-        <div className="mt-12 p-6 bg-white/5 border border-white/10 rounded-3xl text-center">
-          <p className="text-[9px] font-black uppercase tracking-widest text-white/20 leading-relaxed">
-            Conta de Teste Liberada:<br/>
-            <span className="text-primary/60">Email: teste@gmail.com | Senha: teste</span>
-          </p>
-        </div>
       </div>
     </div>
   );
