@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Shield, Lock, ChevronRight, Mail, Loader2, RefreshCw, AlertCircle, UserPlus, ShieldAlert } from 'lucide-react';
+import { 
+  Shield, Lock, ChevronRight, Mail, Loader2, 
+  RefreshCw, AlertCircle, UserPlus, ShieldAlert,
+  Eye, EyeOff // Novos ícones importados
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface AuthProps {
@@ -10,16 +14,18 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Novo Estado
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // ── ESTADO DE VISIBILIDADE DA SENHA ──
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // Validação de Confirmação de Senha[cite: 10]
     if (!isLogin && password !== confirmPassword) {
       setError("DIVERGÊNCIA DE DADOS: As chaves de acesso não conferem.");
       setLoading(false);
@@ -82,17 +88,27 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               />
             </div>
 
-            {/* Campo Senha */}
+            {/* Campo Senha com Visibilidade Alternável */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4">Chave de Acesso</label>
-              <input 
-                type="password"
-                placeholder="********"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full bg-black/50 border border-white/10 p-5 pl-6 text-xs font-black uppercase text-white outline-none focus:border-white/40 rounded-2xl transition-all"
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  placeholder="********"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full bg-black/50 border border-white/10 p-5 pl-6 pr-14 text-xs font-black uppercase text-white outline-none focus:border-white/40 rounded-2xl transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/60 transition-colors"
+                  title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
             </div>
 
             {/* Campo de Confirmação (Aparece apenas no Cadastro) */}
@@ -101,14 +117,16 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <label className="text-[10px] font-black uppercase tracking-widest text-cyan-400/50 ml-4 flex items-center gap-2">
                   <ShieldAlert className="w-3.5 h-3.5" /> Confirmar Chave
                 </label>
-                <input 
-                  type="password"
-                  placeholder="DIGITE NOVAMENTE"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full bg-black/50 border border-cyan-500/20 p-5 pl-6 text-xs font-black uppercase text-white outline-none focus:border-cyan-500/50 rounded-2xl transition-all"
-                />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    placeholder="DIGITE NOVAMENTE"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full bg-black/50 border border-cyan-500/20 p-5 pl-6 pr-14 text-xs font-black uppercase text-white outline-none focus:border-cyan-500/50 rounded-2xl transition-all"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -136,6 +154,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 setIsLogin(!isLogin);
                 setError(null);
                 setConfirmPassword('');
+                setShowPassword(false); // Reseta a visibilidade ao trocar de modo
               }}
               className="w-full p-4 border border-white/5 rounded-2xl hover:bg-white/[0.02] transition-all flex flex-col items-center gap-2"
             >

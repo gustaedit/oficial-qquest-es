@@ -269,7 +269,7 @@ const ScenarioCard = ({ scenario, onDelete, onStart }: any) => (
     </div>
     <div className="flex gap-3 ml-4">
       <button onClick={onDelete} className="p-3 text-white/10 hover:text-red-500 transition-colors bg-white/5 rounded-xl"><Trash2 className="w-4 h-4"/></button>
-      <button onClick={onStart} className="px-8 py-3 bg-white text-black font-black uppercase text-[10px] rounded-xl hover:bg-primary transition-all active:scale-95 shadow-lg">Engajar</button>
+      <button onClick={onStart} className="px-8 py-3 bg-white text-black font-black uppercase text-[10px] rounded-xl hover:bg-primary transition-all active:scale-95 shadow-lg">Login</button>
     </div>
   </div>
 );

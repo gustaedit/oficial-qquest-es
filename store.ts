@@ -146,10 +146,14 @@ export function useStorage() {
   };
 
   const addAttempt = async (a: UserAttempt) => {
-    const { id, ...attemptData } = a;
-    await supabase.from('attempts').insert([attemptData]);
-    setDb(prev => ({ ...prev, attempts: [...prev.attempts, a] }));
-  };
+  const { id, ...attemptData } = a;
+  // Mapeia o campo userId do código para a coluna user_id do banco
+  await supabase.from('attempts').insert([{
+    ...attemptData,
+    user_id: a.userId // Garante a gravação do vínculo
+  }]);
+  setDb(prev => ({ ...prev, attempts: [...prev.attempts, a] }));
+};
 
   return {
     db,

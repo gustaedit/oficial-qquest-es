@@ -75,9 +75,10 @@ export const Layout: React.FC<LayoutProps> = ({
         </nav>
 
         <div className="mt-auto flex flex-col items-center gap-6">
-          <button onClick={toggleTheme} className="p-3 bg-gray-200 dark:bg-white/5 rounded-2xl text-gray-600 dark:text-gray-400 hover:text-primary transition-all">
+          {/*Botao de modo escuro*/}
+          {/*<button onClick={toggleTheme} className="p-3 bg-gray-200 dark:bg-white/5 rounded-2xl text-gray-600 dark:text-gray-400 hover:text-primary transition-all">
             {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-          </button>
+          </button>*/}
           <button onClick={handleLogout} title="Sair" className="p-4 text-gray-400 hover:text-red-500 transition-colors">
             <LogOut className="w-6 h-6" />
           </button>
