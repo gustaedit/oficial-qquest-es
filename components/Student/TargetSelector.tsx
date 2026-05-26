@@ -30,6 +30,7 @@ const CAREER_LABEL: Record<string, { label: string; desc: string }> = {
   'Escrivão': { label: 'Escrivão de Polícia', desc: 'Arquivologia + Estatística' },
   'Delegado': { label: 'Delegado de Polícia', desc: 'Carreira Jurídica PC-BA' },
   'Perito': { label: 'Perito Criminal', desc: 'Medicina Legal + Conhecimentos Técnicos' },
+  
 };
 
 export const TargetSelector: React.FC<TargetSelectorProps> = ({ tags, questions, onSelect, savedScenarios = [] }) => {
@@ -54,12 +55,18 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({ tags, questions,
     return [...fromTags, ...fromBank];
   }, [tags.disciplines, disciplineCount]);
 
-  const careerOptions = useMemo(() => {
-    const classes = [...new Set(questions.map(q => q.contestClass).filter(Boolean))] as string[];
-    return classes
-      .map(id => ({ id, label: CAREER_LABEL[id]?.label ?? id, desc: CAREER_LABEL[id]?.desc ?? 'Questões PC-BA', count: careerCount[id] || 0 }))
-      .filter(c => c.count > 0);
-  }, [questions, careerCount]);
+ const careerOptions = useMemo(() => {
+  const classes = [...new Set(questions.map(q => q.contestClass).filter(Boolean))] as string[];
+  return classes
+    .map(id => ({ 
+      id, 
+      label: CAREER_LABEL[id]?.label ?? id, 
+      desc: CAREER_LABEL[id]?.desc ?? 'Questões PC-BA', 
+      count: careerCount[id] || 0 
+    }))
+    // ── ADICIONA ESTE FILTRO AQUI: Exclui o 'Operacional' da renderização visual ──
+    .filter(c => c.count > 0 && c.id !== 'Operacional'); 
+}, [questions, careerCount]);
 
   const availableTopics = useMemo(() => {
     if (!selectedDiscipline) return [];

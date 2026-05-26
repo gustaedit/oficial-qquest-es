@@ -269,23 +269,26 @@ export const QuestionViewer: React.FC<QuestionViewerProps> = ({
             
             <div className="grid grid-cols-1 gap-4">
               {currentQuestion.options.map((opt, idx) => {
-                const effectiveSelectionId = currentAnswer || selectedOptionId;
-                const isSelected = effectiveSelectionId === opt.id;
-                const isCorrect  = opt.id === currentQuestion.correctOptionId;
-                const isCut      = cutOptions.has(opt.id);
-                
-                let btnStyle = 'bg-gray-200/50 dark:bg-white/[0.03] border-gray-300 dark:border-white/5 hover:bg-gray-300 dark:hover:bg-white/[0.08] text-gray-800 dark:text-white/60';
-                
-                if (isCut && !hasAnswered) { 
-                  btnStyle = 'bg-transparent border-gray-200 dark:border-white/[0.04] opacity-40 text-gray-400 dark:text-white/20'; 
-                } else if (hasAnswered) {
-                  if (isCorrect)       btnStyle = 'bg-emerald-500 text-black border-emerald-500 shadow-[0_10px_30px_rgba(16,185,129,0.3)] scale-[1.02] z-20';
-                  else if (isSelected) btnStyle = 'bg-red-500 text-black border-red-500 shadow-[0_10px_30px_rgba(239,68,68,0.3)]';
-                  else                 btnStyle = 'bg-transparent border-gray-300 dark:border-white/5 opacity-30 grayscale pointer-events-none';
-                } else if (isSelected) { 
-                  btnStyle = 'bg-black dark:bg-white text-white dark:text-black border-transparent shadow-xl scale-[1.02] z-10'; 
-                }
+    // Lógica de seleção efetiva (usa o que está salvo se houver)
+    const effectiveSelectionId = currentAnswer || selectedOptionId;
+    
+    // Normalização preventiva para evitar quebra de maiúsculas/minúsculas
+    const isSelected = effectiveSelectionId?.toLowerCase() === opt.id.toLowerCase();
+    const isCorrect  = opt.id.toLowerCase() === currentQuestion.correctOptionId.toLowerCase();
+    const isCut      = cutOptions.has(opt.id);
 
+    let btnStyle = 'bg-gray-200/50 dark:bg-white/[0.03] border-gray-300 dark:border-white/5 hover:bg-gray-300 dark:hover:bg-white/[0.08] text-gray-800 dark:text-white/60';
+
+    if (isCut && !hasAnswered) { 
+      btnStyle = 'bg-transparent border-gray-200 dark:border-white/[0.04] opacity-40 text-gray-400 dark:text-white/20'; 
+    } else if (hasAnswered) {
+      // Se for a alternativa correta da questão, aplica o verde tático independente de o usuário ter acertado ou errado
+      if (isCorrect)       btnStyle = 'bg-emerald-500 text-black border-emerald-500 shadow-[0_10px_30px_rgba(16,185,129,0.3)] scale-[1.02] z-20';
+      else if (isSelected) btnStyle = 'bg-red-500 text-black border-red-500 shadow-[0_10px_30px_rgba(239,68,68,0.3)]';
+      else                 btnStyle = 'bg-transparent border-gray-300 dark:border-white/5 opacity-30 grayscale pointer-events-none';
+    } else if (isSelected) { 
+      btnStyle = 'bg-black dark:bg-white text-white dark:text-black border-transparent shadow-xl scale-[1.02] z-10'; 
+    }
                 return (
                   <div key={opt.id} className="relative group/opt">
                     <button

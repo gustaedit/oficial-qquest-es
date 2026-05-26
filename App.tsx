@@ -8,8 +8,9 @@ import { Dashboard as StudentDashboard } from './components/Student/Dashboard';
 import { TargetSelector } from './components/Student/TargetSelector';
 import { CustomTraining } from './components/Student/CustomTraining';
 import { UserProfile } from './components/Student/UserProfile'; 
-import { SimuladosPage } from './components/Student/SimuladosPage'; // Importação da nova página
+import { SimuladosPage } from './components/Student/SimuladosPage';
 import { supabase } from './lib/supabase';
+import { UserAttempt, Question } from './types'; // Importação das interfaces para mitigar erros de tipagem
 
 import { Shield, Loader2, History } from 'lucide-react';
 
@@ -29,7 +30,11 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isPaid, setIsPaid] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<string>('performance');
+
+  // ── ATUALIZAÇÃO DE DIRECIONAMENTO INICIAL ──
+  // Alterado de 'performance' para 'free-study' para abrir direto na área de missões
+  const [currentPage, setCurrentPage] = useState<string>('free-study');
+  
   const [activePackageId, setActivePackageId] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] = useState<any>(null);
   const [showCustomConfig, setShowCustomConfig] = useState(false);
@@ -37,8 +42,11 @@ const App: React.FC = () => {
 
   // ── FILTRAGEM INDIVIDUAL DE TENTATIVAS ──
   const userAttempts = useMemo(() => {
-    if (!session?.user?.id) return [];
-    return db.attempts.filter(a => a.userId === session.user.id || a.user_id === session.user.id);
+    const currentUserId = session?.user?.id;
+    if (!currentUserId) return [];
+    return db.attempts.filter((a: UserAttempt) => 
+      a.userId === currentUserId || (a as any).user_id === currentUserId
+    );
   }, [db.attempts, session?.user?.id]);
 
   const checkPaymentStatus = async (user: any) => {
@@ -55,7 +63,7 @@ const App: React.FC = () => {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
       setSession(session);
       if (session?.user) checkPaymentStatus(session.user);
     });
@@ -84,35 +92,32 @@ const App: React.FC = () => {
   };
 
   const displayedQuestions = useMemo(() => {
-    // Caso seja um Simulado (Package) selecionado
     if (activePackageId) {
-      const pkgQuestions = db.questions.filter(q => 
+      const pkgQuestions = db.questions.filter((q: Question) => 
         db.packages.find(p => p.id === activePackageId)?.questionIds.includes(q.id)
       );
       return shuffleArray(pkgQuestions);
     }
 
-    // Caso existam filtros aplicados (Estudo Livre)
     if (selectedFilters !== null) {
       let filtered = db.questions;
 
-      if (selectedFilters.discipline) filtered = filtered.filter(q => q.discipline === selectedFilters.discipline);
-      if (selectedFilters.contestClass) filtered = filtered.filter(q => q.contestClass === selectedFilters.contestClass);
+      if (selectedFilters.discipline) filtered = filtered.filter((q: Question) => q.discipline === selectedFilters.discipline);
+      if (selectedFilters.contestClass) filtered = filtered.filter((q: Question) => q.contestClass === selectedFilters.contestClass);
       if (selectedFilters.disciplines?.length > 0) {
-        filtered = filtered.filter(q => selectedFilters.disciplines.includes(q.discipline));
+        filtered = filtered.filter((q: Question) => selectedFilters.disciplines.includes(q.discipline));
       }
       if (selectedFilters.answeredQuestionIds?.length > 0) {
-        filtered = filtered.filter(q => !selectedFilters.answeredQuestionIds.includes(q.id));
+        filtered = filtered.filter((q: Question) => !selectedFilters.answeredQuestionIds.includes(q.id));
       }
-      if (selectedFilters.board) filtered = filtered.filter(q => q.board === selectedFilters.board);
-      if (selectedFilters.year) filtered = filtered.filter(q => q.year === selectedFilters.year);
+      if (selectedFilters.board) filtered = filtered.filter((q: Question) => q.board === selectedFilters.board);
+      if (selectedFilters.year) filtered = filtered.filter((q: Question) => q.year === selectedFilters.year);
 
       const shuffled = shuffleArray(filtered);
       const limit = parseInt(selectedFilters.limit);
       return isNaN(limit) ? shuffled : shuffled.slice(0, limit);
     }
     
-    // Default
     return shuffleArray(db.questions).slice(0, 20);
   }, [db.questions, selectedFilters, activePackageId, db.packages]);
 
@@ -136,9 +141,7 @@ const App: React.FC = () => {
         return (
           <CustomTraining
             tags={db.tags}
-            userId={session?.user?.id}
-            answeredQuestionIds={userAttempts.map(a => a.questionId)}
-            onStart={(f) => setSelectedFilters(f)}
+            onStart={(f: any) => setSelectedFilters(f)}
             onCancel={() => setShowCustomConfig(false)}
           />
         );
@@ -154,7 +157,6 @@ const App: React.FC = () => {
       );
     }
 
-    // ── LÓGICA DA ABA DE SIMULADOS ──
     if (currentPage === 'my-packages') {
       if (activePackageId) {
         return (
@@ -175,7 +177,6 @@ const App: React.FC = () => {
         );
       }
       
-      // Renderiza a listagem de cards de simulados
       return (
         <SimuladosPage onSelectSimulado={(id: string) => setActivePackageId(id)} />
       );
@@ -191,7 +192,6 @@ const App: React.FC = () => {
   );
 
   if (!session) return <Auth onLoginSuccess={() => {}} />;
-  
   if (!isPaid) return <PaymentGate />;
 
   return (
