@@ -129,6 +129,7 @@ const App: React.FC = () => {
     if (currentPage === 'free-study') {
       if (!selectedFilters && !showCustomConfig) {
         return (
+          
           <TargetSelector
             tags={db.tags}
             questions={db.questions}
@@ -195,6 +196,7 @@ const App: React.FC = () => {
   if (!isPaid) return <PaymentGate />;
 
   return (
+    
     <Layout currentPage={currentPage} setCurrentPage={resetMission} connectionStatus={connectionStatus}>
       {renderStudent()}
     </Layout>

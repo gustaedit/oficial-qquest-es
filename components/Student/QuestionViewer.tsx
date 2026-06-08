@@ -199,6 +199,7 @@ export const QuestionViewer: React.FC<QuestionViewerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!currentQuestion) return;
       if (hasAnswered) {
         if (e.key === 'ArrowRight') nextQuestion();
         if (e.key === 'ArrowLeft') prevQuestion();
@@ -206,8 +207,8 @@ export const QuestionViewer: React.FC<QuestionViewerProps> = ({
       }
       const keys = ['1', '2', '3', '4', '5', 'a', 'b', 'c', 'd', 'e'];
       const index = keys.indexOf(e.key.toLowerCase());
-      if (index !== -1 && index < (currentQuestion?.options.length ?? 0)) {
-        const opt = currentQuestion.options[index % 5];
+      if (index !== -1 && index < currentQuestion.options.length) {
+        const opt = currentQuestion.options[index % currentQuestion.options.length];
         if (!cutOptions.has(opt.id)) setSelectedOptionId(opt.id);
       }
       if (e.key === 'Enter' && selectedOptionId) handleConfirm();
