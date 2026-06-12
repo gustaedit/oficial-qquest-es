@@ -3,8 +3,7 @@ import { supabase } from './lib/supabase';
 import { Question, QuestionPackage, Tags, UserAttempt, AppState } from './types';
 import { INITIAL_TAGS, INITIAL_QUESTIONS, INITIAL_PACKAGES } from './constants';
 
-// Converte options do formato do banco { "A": "texto", "B": "texto" }
-// para o formato esperado pelo app [{ id: "a", label: "A", text: "texto" }]
+// Converte options do formato do banco para o formato esperado pelo app
 const parseQuestion = (q: any): Question => {
   let raw: any = q.options;
 
@@ -19,8 +18,8 @@ const parseQuestion = (q: any): Question => {
       options = raw; // já no formato correto
     } else {
       options = raw.map((text: string, i: number) => ({
-        id: String.fromCharCode(97 + i),
-        label: String.fromCharCode(65 + i),
+        id: String.fromCharCode(97 + i), // a, b, c...
+        label: String.fromCharCode(65 + i), // A, B, C...
         text: String(text),
       }));
     }
@@ -35,20 +34,42 @@ const parseQuestion = (q: any): Question => {
     options = [];
   }
 
-  // Normaliza correctOptionId para minúsculo (banco tem "A", app usa "a")
+  // ── PROTEÇÃO TÁTICA: Normalização e Conversão de IDs do CSV ──
+  const normalizedOptions = options.map((opt: any) => ({
+    ...opt,
+    id: String(opt.id).toLowerCase()
+  }));
+
   const correctOptionId = q.correctOptionId
-    ? q.correctOptionId.toLowerCase()
+    ? String(q.correctOptionId).toLowerCase()
     : '';
 
-  return { ...q, options, correctOptionId };
+  return { 
+    ...q, 
+    id: String(q.id), 
+    options: normalizedOptions, 
+    correctOptionId 
+  };
 };
 
-const parsePackage = (p: any): QuestionPackage => ({
-  ...p,
-  questionIds: typeof p.questionIds === 'string'
-    ? JSON.parse(p.questionIds)
-    : (Array.isArray(p.questionIds) ? p.questionIds : []),
-});
+const parsePackage = (p: any): QuestionPackage => {
+  let rawIds: any[] = [];
+  
+  if (typeof p.questionIds === 'string') {
+    try { rawIds = JSON.parse(p.questionIds); } catch { rawIds = []; }
+  } else if (Array.isArray(p.questionIds)) {
+    rawIds = p.questionIds;
+  }
+
+  return {
+    ...p,
+    id: String(p.id),
+    questionIds: rawIds.map((id: any) => String(id)),
+    year: p.year || 'OFICIAL',
+    institution: p.institution || 'PROVA',
+    duration_minutes: p.duration_minutes || 270 
+  };
+};
 
 export function useStorage() {
   const [db, setDb] = useState<AppState>({
@@ -75,31 +96,45 @@ export function useStorage() {
         setConnectionStatus('online');
       }
 
-      const [qRes, pRes, aRes] = await Promise.all([
-        supabase.from('questions').select('*').order('createdAt', { ascending: false }),
-        supabase.from('packages').select('*'),
-        supabase.from('attempts').select('*').order('timestamp', { ascending: false })
+      // ── PAGINAÇÃO COLETIVA EM PARALELO ──
+      // Puxa o lote 1 (0 a 1000) e o lote 2 (1001 a 2000) de uma vez só
+      const [qRes1, qRes2, pRes] = await Promise.all([
+        supabase.from('questions').select('*').range(0, 999).order('createdAt', { ascending: false }),
+        supabase.from('questions').select('*').range(1000, 1999).order('createdAt', { ascending: false }),
+        supabase.from('packages').select('*')
       ]);
 
+      // Unifica os dois lotes em um array único de questões
+      const allQuestionsData = [
+        ...(qRes1.data || []),
+        ...(qRes2.data || [])
+      ];
+
+      const localAttemptsRaw = localStorage.getItem('operacao_backlogs');
+      let localAttempts: any[] = [];
+      if (localAttemptsRaw) {
+        try { localAttempts = JSON.parse(localAttemptsRaw); } catch { localAttempts = []; }
+      }
+
       setDb({
-        questions: (qRes.data && qRes.data.length > 0)
-          ? qRes.data.map(parseQuestion)
-          : INITIAL_QUESTIONS,
+        // Entrega todas as 1600+ questões processadas para o estado global
+        questions: (allQuestionsData.length > 0)
+          ? allQuestionsData.map(parseQuestion)
+          : INITIAL_QUESTIONS.map(parseQuestion),
         packages: (pRes.data && pRes.data.length > 0)
           ? pRes.data.map(parsePackage)
-          : INITIAL_PACKAGES,
-        attempts: aRes.data || [],
+          : INITIAL_PACKAGES.map(parsePackage),
+        attempts: localAttempts.map(a => ({
+          ...a,
+          id: String(a.id || ''),
+          questionId: String(a.questionId || ''),
+          userId: String(a.userId || '')
+        })),
         tags: tData || INITIAL_TAGS
       });
 
     } catch (error) {
       setConnectionStatus('error');
-      setDb(prev => ({
-        ...prev,
-        questions: INITIAL_QUESTIONS,
-        packages: INITIAL_PACKAGES,
-        tags: INITIAL_TAGS
-      }));
     } finally {
       setLoading(false);
     }
@@ -145,15 +180,20 @@ export function useStorage() {
     if (!error) setDb(prev => ({ ...prev, packages: [parsePackage(p), ...prev.packages] }));
   };
 
+  // ── GRAVAÇÃO TEMPORÁRIA LOCAL (SEM ENVIAR PARA O SUPABASE) ──
   const addAttempt = async (a: UserAttempt) => {
-  const { id, ...attemptData } = a;
-  // Mapeia o campo userId do código para a coluna user_id do banco
-  await supabase.from('attempts').insert([{
-    ...attemptData,
-    user_id: a.userId // Garante a gravação do vínculo
-  }]);
-  setDb(prev => ({ ...prev, attempts: [...prev.attempts, a] }));
-};
+    setDb(prev => {
+      const updatedAttempts = [a, ...prev.attempts];
+      
+      // Salva a lista de respostas diretamente no HD do navegador do usuário
+      localStorage.setItem('operacao_backlogs', JSON.stringify(updatedAttempts));
+      
+      return { 
+        ...prev, 
+        attempts: updatedAttempts 
+      };
+    });
+  };
 
   return {
     db,

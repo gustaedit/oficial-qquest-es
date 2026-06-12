@@ -7,13 +7,11 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-// ─── TIPOS (Sincronizados com a imagem b69873.png do seu Supabase) ───────────
-
 interface Scenario {
   id: string;
   user_id: string;
-  title: string;           // Corrigido: No seu banco a coluna é 'title'
-  filters: FilterState;     // Coluna 'filters' (jsonb) do banco
+  title: string;           
+  filters: FilterState;     
   last_question_index: number;
   answered_question_ids: string[];
   created_at: string;
@@ -47,7 +45,7 @@ const DEFAULT_FILTERS: FilterState = {
   difficulty: '',
   institution: '',
   limit: '20',
-  hideAnswered: true,
+  hideAnswered: false,
 };
 
 export const CustomTraining: React.FC<CustomTrainingProps> = ({
@@ -55,24 +53,17 @@ export const CustomTraining: React.FC<CustomTrainingProps> = ({
   onStart,
   onCancel,
   answeredQuestionIds = [],
-  userId,
+  userId
 }) => {
+  const [activeTab, setActiveTab] = useState<'config' | 'saved'>('config');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenarioTitle, setScenarioTitle] = useState('');
+  const [savedScenarios, setSavedScenarios] = useState<Scenario[]>([]);
   const [loadingScenarios, setLoadingScenarios] = useState(false);
-  const [savingScenario, setSavingScenario] = useState(false);
-  const [newScenarioName, setNewScenarioName] = useState('');
-  const [showSaveForm, setShowSaveForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'filter' | 'scenarios'>('filter');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const availableTopics = useMemo(() => {
-    const topics: string[] = [];
-    filters.disciplines.forEach(d => {
-      if (tags.topics[d]) topics.push(...tags.topics[d]);
-    });
-    return [...new Set(topics)];
-  }, [filters.disciplines, tags.topics]);
-
+  // Carrega as missões salvas na aba de histórico
   const loadScenarios = useCallback(async () => {
     if (!userId) return;
     setLoadingScenarios(true);
@@ -82,240 +73,220 @@ export const CustomTraining: React.FC<CustomTrainingProps> = ({
         .select('*')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false });
-      
-      if (!error && data) setScenarios(data);
-    } catch (e) {
-      console.warn('Erro ao carregar cenários:', e);
+
+      if (error) throw error;
+      setSavedScenarios(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar cenários:', error);
+    } finally {
+      setLoadingScenarios(false);
     }
-    setLoadingScenarios(false);
   }, [userId]);
 
   useEffect(() => {
-    if (activeTab === 'scenarios') loadScenarios();
+    if (activeTab === 'saved') {
+      loadScenarios();
+    }
   }, [activeTab, loadScenarios]);
 
-  const setFilter = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  const handleStart = () => {
+    onStart({
+      ...filters,
+      answeredQuestionIds: filters.hideAnswered ? answeredQuestionIds : [],
+    });
   };
 
-  const toggleItem = (list: string[], key: 'disciplines' | 'topics', item: string) => {
-    if (list.includes(item)) {
-      setFilter(key, list.filter(i => i !== item));
-    } else {
-      setFilter(key, [...list, item]);
-    }
-  };
+  const handleSaveScenario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !scenarioTitle.trim()) return;
 
-  // ── FUNÇÃO DE SALVAMENTO CORRIGIDA (COLUNA 'TITLE') ──
-  const handleSaveScenario = async () => {
-    if (!newScenarioName.trim() || !userId) return;
-    setSavingScenario(true);
-    
+    setActionLoading(true);
     try {
-      const payload = {
-        user_id: userId,
-        title: newScenarioName.trim(), // Ajustado para 'title' conforme o banco
-        filters: filters,            // Salva o objeto completo no banco
-        last_question_index: 0,
-        answered_question_ids: filters.hideAnswered ? answeredQuestionIds : [],
-        updated_at: new Date().toISOString()
-      };
+      const { error } = await supabase.from('training_scenarios').insert([
+        {
+          user_id: userId,
+          title: scenarioTitle.trim(),
+          filters,
+          answered_question_ids: answeredQuestionIds,
+          last_question_index: 0,
+        },
+      ]);
 
-      const { data, error } = await supabase
-        .from('training_scenarios')
-        .insert([payload])
-        .select()
-        .single();
+      if (error) throw error;
 
-      if (error) {
-        console.error('Erro Supabase:', error.message);
-        alert(`Erro ao salvar: ${error.message}`);
-        return;
-      }
-
-      if (data) {
-        setScenarios(prev => [data, ...prev]);
-        setNewScenarioName('');
-        setShowSaveForm(false);
-        setActiveTab('scenarios');
-      }
-    } catch (e) {
-      console.error('Erro inesperado:', e);
+      setScenarioTitle('');
+      setIsSaving(false);
+      await loadScenarios();
+      alert('Missão operacional salva com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar cenário:', error);
+      alert('Falha ao registrar missão.');
     } finally {
-      setSavingScenario(false);
+      setActionLoading(false);
     }
   };
 
-  const handleDeleteScenario = async (scenarioId: string) => {
+  const handleDeleteScenario = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Deseja destruir este registro de missão permanentemente?')) return;
+
     try {
-      await supabase.from('training_scenarios').delete().eq('id', scenarioId);
-      setScenarios(prev => prev.filter(s => s.id !== scenarioId));
-    } catch (e) {
-      console.warn('Erro ao deletar:', e);
+      const { error } = await supabase.from('training_scenarios').delete().eq('id', id);
+      if (error) throw error;
+      setSavedScenarios(prev => prev.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Erro ao deletar:', error);
     }
+  };
+
+  const toggleItem = (currentList: string[], field: keyof FilterState, item: string) => {
+    const updated = currentList.includes(item)
+      ? currentList.filter(i => i !== item)
+      : [...currentList, item];
+    
+    setFilters(prev => ({ ...prev, [field]: updated }));
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-6 animate-in slide-in-from-bottom-8 duration-500">
-      <div className="bg-white dark:bg-[#0A0A0A] border border-gray-300 dark:border-white/10 rounded-[3rem] overflow-hidden shadow-2xl">
-        
-        <div className="bg-[#0F172A] p-8 md:p-10 border-b border-white/5">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              <div className="p-4 bg-primary text-black rounded-3xl">
-                <SlidersHorizontal className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black uppercase italic text-white">Construtor de Missão</h3>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mt-1">Sincronização Operacional · PC-BA</p>
-              </div>
-            </div>
-            <button onClick={onCancel} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all">
-              <X className="w-5 h-5 text-white/60" />
-            </button>
-          </div>
-
-          <div className="flex gap-2 mt-8">
-            <TabButton active={activeTab === 'filter'} onClick={() => setActiveTab('filter')} label="Filtros" icon={<SlidersHorizontal className="w-4 h-4"/>} />
-            <TabButton active={activeTab === 'scenarios'} onClick={() => setActiveTab('scenarios')} label={`Meus Treinos (${scenarios.length})`} icon={<Bookmark className="w-4 h-4"/>} />
-          </div>
+    <div className="max-w-4xl mx-auto py-2 animate-in fade-in zoom-in-95 duration-500">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <button onClick={onCancel} className="px-5 py-2.5 bg-gray-200 dark:bg-white/5 rounded-2xl text-[10px] font-black uppercase text-gray-600 dark:text-white/40 hover:text-primary transition-all">← Cancelar</button>
+          <h2 className="text-2xl font-black uppercase italic text-gray-900 dark:text-white flex items-center gap-2"><SlidersHorizontal className="w-6 h-6 text-primary" /> Filtro Avançado</h2>
         </div>
-
-        {activeTab === 'filter' ? (
-          <div className="p-8 md:p-12 space-y-10">
-            <div onClick={() => setFilter('hideAnswered', !filters.hideAnswered)} className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${filters.hideAnswered ? 'border-primary bg-primary/10' : 'border-gray-200 dark:border-white/10'}`}>
-              <div className="flex items-center gap-4">
-                <EyeOff className={`w-5 h-5 ${filters.hideAnswered ? 'text-primary' : 'text-gray-400'}`} />
-                <div>
-                  <p className="text-sm font-black uppercase text-gray-900 dark:text-white">Focar em questões inéditas</p>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{answeredQuestionIds.length} questões no registro de histórico</p>
-                </div>
-              </div>
-              <div className={`w-12 h-6 rounded-full relative transition-all ${filters.hideAnswered ? 'bg-primary' : 'bg-gray-200 dark:bg-white/10'}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${filters.hideAnswered ? 'left-7' : 'left-1'}`} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <VisualSelect icon={<Target />} label="Banca" value={filters.board} onChange={v => setFilter('board', v)} options={tags.boards} />
-              <VisualSelect icon={<Calendar />} label="Ano" value={filters.year} onChange={v => setFilter('year', v)} options={tags.years} />
-              <VisualSelect icon={<Briefcase />} label="Órgão" value={filters.institution} onChange={v => setFilter('institution', v)} options={tags.institutions} />
-              <VisualSelect icon={<BarChart />} label="Dificuldade" value={filters.difficulty} onChange={v => setFilter('difficulty', v as Difficulty | '')} options={['Fácil', 'Médio', 'Difícil']} />
-              <div className="group space-y-3">
-                <label className="text-[10px] font-black uppercase text-gray-500 dark:text-white/30 ml-4 flex items-center gap-2"><Zap className="w-3.5 h-3.5" /> Quantidade</label>
-                <input type="number" value={filters.limit} onChange={e => setFilter('limit', e.target.value)} className="w-full bg-gray-100 dark:bg-white/[0.04] border-2 border-gray-200 dark:border-white/10 p-5 outline-none text-[11px] font-black text-gray-900 dark:text-white rounded-[1.5rem] focus:border-primary transition-all" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 pt-8 border-t border-gray-200 dark:border-white/5">
-              <MultiSelectSection icon={<BookOpen />} label="Disciplinas" options={tags.disciplines} selected={filters.disciplines} onToggle={item => toggleItem(filters.disciplines, 'disciplines', item)} />
-              <MultiSelectSection icon={<Layers />} label="Assuntos" options={availableTopics} selected={filters.topics} onToggle={item => toggleItem(filters.topics, 'topics', item)} disabled={filters.disciplines.length === 0} />
-            </div>
-
-            <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              <button onClick={() => setFilters(DEFAULT_FILTERS)} className="flex items-center gap-2 px-6 py-4 text-[10px] font-black uppercase text-gray-500 hover:text-red-500 transition-all"><Trash2 className="w-4 h-4" /> Resetar</button>
-              <div className="flex gap-3 w-full md:w-auto">
-                <button onClick={() => setShowSaveForm(true)} className="px-6 py-4 border border-white/10 rounded-2xl text-[10px] font-black uppercase text-white/60 hover:text-primary transition-all"><Save className="w-4 h-4 inline mr-2" /> Salvar Missão</button>
-                <button onClick={() => onStart(filters)} className="flex-1 md:flex-none px-12 py-4 bg-primary text-black font-black uppercase text-[11px] rounded-2xl hover:scale-[1.03] transition-all shadow-xl shadow-primary/20">Iniciar Missão</button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="p-8 md:p-12">
-            {loadingScenarios ? (
-              <div className="flex flex-col items-center py-20 gap-4"><Loader2 className="w-8 h-8 animate-spin text-primary" /><span className="text-[10px] font-black uppercase text-white/20">Sincronizando Banco...</span></div>
-            ) : scenarios.length === 0 ? (
-              <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-3xl"><Bookmark className="w-12 h-12 text-white/5 mx-auto mb-4" /><p className="text-[10px] font-black uppercase text-white/20">Nenhum cenário salvo.</p></div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {scenarios.map(s => (
-                  <ScenarioCard key={s.id} scenario={s} onDelete={() => handleDeleteScenario(s.id)} onStart={() => onStart({ ...s.filters, answeredQuestionIds: s.answered_question_ids })} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex bg-gray-200 dark:bg-white/5 p-1.5 rounded-2xl border border-gray-300 dark:border-white/10">
+          <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'config' ? 'bg-primary text-black shadow' : 'text-gray-500 dark:text-white/40'}`}>Configurar</button>
+          <button onClick={() => setActiveTab('saved')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'saved' ? 'bg-primary text-black shadow' : 'text-gray-500 dark:text-white/40'}`}><Bookmark className="w-3 h-3" /> Meus Treinos ({userId ? savedScenarios.length : 0})</button>
+        </div>
       </div>
 
-      {showSaveForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-[#111] border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h4 className="text-xl font-black uppercase italic text-white mb-6">Nomear Missão</h4>
-            <input autoFocus type="text" placeholder="Ex: PC-BA | Direito Penal" value={newScenarioName} onChange={e => setNewScenarioName(e.target.value)} className="w-full bg-white/5 border-2 border-white/10 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:border-primary transition-all mb-6 uppercase" />
-            <div className="flex gap-3">
-              <button onClick={() => setShowSaveForm(false)} className="flex-1 py-4 bg-white/5 text-white/40 font-black uppercase text-[10px] rounded-2xl hover:bg-white/10 transition-all">Cancelar</button>
-              <button onClick={handleSaveScenario} disabled={!newScenarioName.trim() || savingScenario} className="flex-1 py-4 bg-primary text-black font-black uppercase text-[10px] rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">{savingScenario ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar Registro'}</button>
+      {activeTab === 'config' ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="md:col-span-2 space-y-6">
+            {/* MultiSeletor Dinâmico de Disciplinas limpo contra lixo de espaçamentos */}
+            <MultiSelectSection 
+              icon={<BookOpen />} 
+              label="Disciplinas" 
+              options={[...new Set((tags as any).questions?.map((q: any) => q.discipline?.trim()).filter(Boolean) || tags.disciplines || [])]} 
+              selected={filters.disciplines} 
+              onToggle={item => toggleItem(filters.disciplines, 'disciplines', item)} 
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <SelectSection icon={<Target />} label="Banca" value={filters.board} options={['FCC', 'CESPE', 'FGV', 'IBFC', 'VUNESP']} onChange={val => setFilters(prev => ({ ...prev, board: val }))} />
+              <SelectSection icon={<Calendar />} label="Ano" value={filters.year} options={['2026', '2025', '2024', '2023', '2022', '2021']} onChange={val => setFilters(prev => ({ ...prev, year: val }))} />
+              <SelectSection icon={<Briefcase />} label="Órgão / Instituição" value={filters.institution} options={['PC-BA', 'PM-BA', 'TJ-BA', 'PF', 'PRF']} onChange={val => setFilters(prev => ({ ...prev, institution: val }))} />
+              <SelectSection icon={<Layers />} label="Nível / Dificuldade" value={filters.difficulty} options={['Fácil', 'Médio', 'Difícil']} onChange={val => setFilters(prev => ({ ...prev, difficulty: val as Difficulty }))} />
             </div>
           </div>
+
+          <div className="space-y-6">
+            <div className="bg-white/50 dark:bg-white/[0.02] border border-gray-300 dark:border-white/10 p-6 rounded-[2.5rem] space-y-6 flex flex-col justify-between h-full">
+              <div className="space-y-6">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2 mb-3"><BarChart className="w-3.5 h-3.5 text-primary" /> Volume do Lote</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['5', '10', '20', '50'].map(num => (
+                      <button key={num} onClick={() => setFilters(prev => ({ ...prev, limit: num }))} className={`py-3 font-mono font-black rounded-xl text-xs transition-all border ${filters.limit === num ? 'bg-primary border-primary text-black' : 'bg-transparent border-gray-300 dark:border-white/10 text-gray-700 dark:text-white/40'}`}>{num}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button onClick={() => setFilters(prev => ({ ...prev, hideAnswered: !prev.hideAnswered }))} className={`w-full p-4 rounded-2xl border transition-all flex items-center justify-between text-left ${filters.hideAnswered ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400' : 'bg-transparent border-gray-300 dark:border-white/10 text-gray-500 dark:text-white/20'}`}>
+                    <div className="flex items-center gap-3"><EyeOff className="w-5 h-5" /><div className="flex flex-col"><span className="text-[10px] font-black uppercase tracking-wider">Histórico Inédito</span><span className="text-[8px] font-bold uppercase opacity-60">Ocultar Qs respondidas</span></div></div>
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${filters.hideAnswered ? 'border-cyan-400 bg-cyan-400 text-black' : 'border-gray-400'}`}>{filters.hideAnswered && <Check className="w-3 h-3 stroke-[4]" />}</div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-6 border-t border-gray-300 dark:border-white/10">
+                {!isSaving ? (
+                  <button onClick={() => setIsSaving(true)} disabled={!userId} className="w-full py-4 bg-white/5 border border-gray-300 dark:border-white/10 hover:border-cyan-500/50 text-gray-700 dark:text-white/60 hover:text-cyan-400 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-20"><Save className="w-4 h-4" /> Salvar Escopo</button>
+                ) : (
+                  <form onSubmit={handleSaveScenario} className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                    <input type="text" required placeholder="NOME DO TREINO (EX: PENAL TÁTICO)" value={scenarioTitle} onChange={e => setScenarioTitle(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-black/40 border border-gray-300 dark:border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none focus:border-cyan-500" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="submit" disabled={actionLoading} className="py-2.5 bg-cyan-500 text-black font-black text-[9px] uppercase tracking-wider rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-1">{actionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}</button>
+                      <button type="button" onClick={() => { setIsSaving(false); setScenarioTitle(''); }} className="py-2.5 bg-gray-200 dark:bg-white/5 text-gray-600 dark:text-white/40 font-black text-[9px] uppercase tracking-wider rounded-xl">Mudar</button>
+                    </div>
+                  </form>
+                )}
+                <button onClick={handleStart} className="w-full py-5 bg-primary text-black font-black text-xs uppercase tracking-widest rounded-2xl transition-all hover:brightness-105 flex items-center justify-center gap-2 shadow-lg shadow-primary/10"><Zap className="w-4 h-4 fill-current" /> Iniciar Missão</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {loadingScenarios ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-3"><Loader2 className="w-8 h-8 text-primary animate-spin" /><span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Acessando Arquivos...</span></div>
+          ) : savedScenarios.length === 0 ? (
+            <div className="py-16 text-center border-2 border-dashed border-gray-300 dark:border-white/5 rounded-[2rem]"><span className="text-[10px] font-black uppercase text-gray-400 dark:text-white/20 tracking-widest">Nenhuma missão tática registrada neste terminal</span></div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {savedScenarios.map(s => (
+                <div key={s.id} onClick={() => onStart({ ...s.filters, answeredQuestionIds: s.answered_question_ids })} className="group p-6 bg-white dark:bg-white/[0.02] border border-gray-300 dark:border-white/5 rounded-[2rem] hover:border-primary/40 transition-all text-left cursor-pointer flex justify-between items-center">
+                  <div className="space-y-2 max-w-[80%]">
+                    <div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-xl group-hover:bg-primary group-hover:text-black transition-all"><Play className="w-3 h-3 fill-current" /></div><span className="text-[9px] font-black text-primary uppercase tracking-widest">{s.filters.limit || '20'} Qs Operacionais</span></div>
+                    <h4 className="text-base font-black uppercase italic text-gray-900 dark:text-white truncate">{s.title}</h4>
+                    <p className="text-[8px] font-bold text-gray-400 dark:text-white/20 uppercase truncate">{s.filters.disciplines?.join(' · ') || 'Filtros Amplos'}</p>
+                  </div>
+                  <button onClick={(e) => handleDeleteScenario(s.id, e)} className="p-3 bg-red-500/10 hover:bg-red-500 hover:text-black text-red-500 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-const ScenarioCard = ({ scenario, onDelete, onStart }: any) => (
-  <div className="group bg-[#0A0A0A] border border-white/5 p-6 rounded-[2rem] hover:border-primary/40 transition-all flex items-center justify-between shadow-sm">
-    <div className="flex-1">
-      {/* Corrigido para scenario.title */}
-      <h5 className="text-lg font-black uppercase italic text-white group-hover:text-primary transition-colors">{scenario.title}</h5>
-      <div className="flex flex-wrap gap-2 mt-2">
-        <span className="text-[8px] font-black uppercase px-2 py-0.5 bg-primary/10 text-primary rounded-md border border-primary/20">
-          {scenario.filters?.limit || '20'} QUESTÕES
-        </span>
-        <span className="text-[8px] font-black uppercase text-white/20 tracking-widest mt-1">
-          {scenario.filters?.disciplines?.length > 0 ? scenario.filters.disciplines.join(' · ') : 'Filtros Gerais'}
-        </span>
-      </div>
-    </div>
-    <div className="flex gap-3 ml-4">
-      <button onClick={onDelete} className="p-3 text-white/10 hover:text-red-500 transition-colors bg-white/5 rounded-xl"><Trash2 className="w-4 h-4"/></button>
-      <button onClick={onStart} className="px-8 py-3 bg-white text-black font-black uppercase text-[10px] rounded-xl hover:bg-primary transition-all active:scale-95 shadow-lg">Login</button>
-    </div>
-  </div>
-);
-
-const TabButton = ({ active, onClick, label, icon }: any) => (
-  <button onClick={onClick} className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all ${active ? 'bg-primary text-black shadow-lg shadow-primary/10' : 'bg-white/5 text-white/40 hover:text-white'}`}>
-    {icon} {label}
-  </button>
-);
-
-const VisualSelect = ({ icon, label, value, onChange, options, placeholder = 'Todas' }: any) => (
-  <div className="group space-y-3">
-    <label className="text-[10px] font-black uppercase text-gray-500 dark:text-white/30 ml-4 flex items-center gap-2">
-      {React.cloneElement(icon, { className: 'w-3.5 h-3.5' })} {label}
-    </label>
-    <div className="relative">
-      <select value={value} onChange={e => onChange(e.target.value)} className="w-full bg-gray-100 dark:bg-white/[0.04] border-2 border-gray-200 dark:border-white/10 p-5 outline-none text-[11px] font-black text-gray-900 dark:text-white rounded-[1.5rem] focus:border-primary appearance-none cursor-pointer transition-all">
-        <option value="">{placeholder}</option>
-        {options.map((o: any) => <option key={o} value={o} className="bg-white dark:bg-black">{o}</option>)}
-      </select>
-      <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-    </div>
-  </div>
-);
-
-const MultiSelectSection = ({ icon, label, options, selected, onToggle, disabled = false }: any) => {
+interface MultiSelectSectionProps { icon: React.ReactElement; label: string; options: string[]; selected: string[]; onToggle: (item: string) => void; disabled?: boolean; }
+const MultiSelectSection: React.FC<MultiSelectSectionProps> = ({ icon, label, options, selected, onToggle, disabled }) => {
   const [search, setSearch] = useState('');
-  const filtered = options.filter((o: string) => o.toLowerCase().includes(search.toLowerCase()));
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className={`space-y-4 ${disabled ? 'opacity-20 pointer-events-none grayscale' : ''}`}>
       <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">{React.cloneElement(icon, { className: 'w-3.5 h-3.5' })} {label}</label>
-      <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] overflow-hidden shadow-inner">
-        <div className="p-4 border-b border-white/5 flex items-center gap-3 bg-white/5">
-          <Search className="w-4 h-4 text-white/20" />
-          <input type="text" placeholder="BUSCAR MATÉRIA..." value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent outline-none text-[10px] font-bold text-white w-full uppercase placeholder:text-white/10" />
+      <div className="bg-white/[0.02] border border-gray-300 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-inner bg-white dark:bg-black/20">
+        <div className="p-4 border-b border-gray-200 dark:border-white/5 flex items-center gap-3 bg-gray-100 dark:bg-white/5">
+          <Search className="w-4 h-4 text-gray-400 dark:text-white/20" />
+          <input type="text" placeholder="BUSCAR MATÉRIA..." value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent outline-none text-[10px] font-bold text-gray-800 dark:text-white w-full uppercase placeholder:text-gray-400 dark:placeholder:text-white/10" />
         </div>
-        <div className="h-48 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-primary/20">
-          {filtered.map((opt: string) => (
-            <button key={opt} onClick={() => onToggle(opt)} className={`w-full flex items-center justify-between p-3 rounded-xl mb-1 text-left transition-all ${selected.includes(opt) ? 'bg-primary text-black' : 'text-white/40 hover:bg-white/5'}`}>
-              <span className="text-[9px] font-black uppercase leading-none">{opt}</span>
-              {selected.includes(opt) && <Check className="w-3 h-3" />}
+        <div className="h-48 overflow-y-auto p-2 scrollbar-thin">
+          {filtered.map(opt => (
+            <button key={opt} onClick={() => onToggle(opt)} className={`w-full flex items-center justify-between p-3 rounded-xl mb-1 text-left transition-all ${selected.includes(opt) ? 'bg-primary text-black font-black' : 'text-gray-700 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/5'}`}>
+              <span className="text-[10px] uppercase font-bold tracking-wider">{opt}</span>
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${selected.includes(opt) ? 'border-black' : 'border-gray-400'}`}>{selected.includes(opt) && <Check className="w-2.5 h-2.5 stroke-[4]" />}</div>
             </button>
           ))}
         </div>
       </div>
+    </div>
+  );
+};
+
+interface SelectSectionProps { icon: React.ReactElement; label: string; value: string; options: string[]; onChange: (val: string) => void; }
+const SelectSection: React.FC<SelectSectionProps> = ({ icon, label, value, options, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="space-y-3 relative">
+      <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">{React.cloneElement(icon, { className: 'w-3.5 h-3.5' })} {label}</label>
+      <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between p-4 bg-white dark:bg-white/[0.02] border border-gray-300 dark:border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-wider text-gray-800 dark:text-white/60 hover:border-primary/50 transition-all"><span>{value || 'Todas'}</span><ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} /></button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute z-20 top-full left-0 right-0 mt-2 bg-white dark:bg-black/90 border border-gray-300 dark:border-white/10 rounded-2xl max-h-40 overflow-y-auto p-1 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+            <button onClick={() => { onChange(''); setIsOpen(false); }} className={`w-full text-left p-3 rounded-xl text-[9px] font-black uppercase tracking-wider ${value === '' ? 'bg-primary text-black' : 'text-gray-500 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/5'}`}>Todas</button>
+            {options.map(opt => (
+              <button key={opt} onClick={() => { onChange(opt); setIsOpen(false); }} className={`w-full text-left p-3 rounded-xl text-[9px] font-black uppercase tracking-wider ${value === opt ? 'bg-primary text-black' : 'text-gray-700 dark:text-white/40 hover:bg-gray-100 dark:hover:bg-white/5'}`}>{opt}</button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };

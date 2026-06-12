@@ -144,7 +144,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               disabled={loading}
               className={`w-full py-6 text-black font-black uppercase tracking-[0.3em] rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 ${themeColor} hover:brightness-110 active:scale-95 disabled:opacity-50`}
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isLogin ? 'Engajar' : 'Sintetizar'} 
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isLogin ? 'Login' : 'Sintetizar'} 
               <ChevronRight className="w-5 h-5" />
             </button>
 

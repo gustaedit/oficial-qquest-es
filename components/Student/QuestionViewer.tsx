@@ -22,10 +22,11 @@ interface QuestionViewerProps {
   title?: string;
   onRefreshAI?: () => void;
   isGenerating?: boolean;
+  onFinishSimulado?: () => void;
 }
 
 export const QuestionViewer: React.FC<QuestionViewerProps> = ({
-  questions, onAnswer, title, onRefreshAI, isGenerating
+  questions, onAnswer, title, onRefreshAI, isGenerating, onFinishSimulado
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -362,14 +363,21 @@ export const QuestionViewer: React.FC<QuestionViewerProps> = ({
           </div>
         )}
 
-        {/* Botão Próxima */}
-        <button 
-          onClick={nextQuestion} 
-          disabled={!hasAnswered && currentIndex === questions.length - 1 && !currentQuestion?.isAI}
-          className={`w-full sm:w-auto px-8 py-6 ${hasAnswered ? 'bg-primary text-black' : 'border-2 border-gray-300 dark:border-white/10 text-gray-600 dark:text-white/40'} font-black uppercase tracking-widest text-[10px] rounded-[2rem] flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-20`}
-        >
-          Próxima <ChevronRight className="w-5 h-5" />
-        </button>
+      
+        {/* Botão Próxima / Finalizar Simulado */}
+<button 
+  onClick={() => {
+    if (currentIndex === questions.length - 1) {
+      if (onFinishSimulado) onFinishSimulado();
+    } else {
+      nextQuestion();
+    }
+  }} 
+  disabled={!hasAnswered && currentIndex === questions.length - 1 && !currentQuestion?.isAI}
+  className={`w-full sm:w-auto px-8 py-6 ${hasAnswered ? 'bg-primary text-black' : 'border-2 border-gray-300 dark:border-white/10 text-gray-600 dark:text-white/40'} font-black uppercase tracking-widest text-[10px] rounded-[2rem] flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-20`}
+>
+  {currentIndex === questions.length - 1 ? 'Finalizar Simulado' : 'Próxima'} <ChevronRight className="w-5 h-5" />
+</button>
       </div>
 
       {/* BLOCOS DE FUNDAMENTAÇÃO E COMENTÁRIOS IGUAIS AO SEU... (omitidos para poupar espaço) */}

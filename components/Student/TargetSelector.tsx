@@ -5,14 +5,16 @@ import { Tags, Question } from '../../types';
 interface TargetSelectorProps {
   tags: Tags;
   questions: Question[];
-  savedScenarios?: any[]; // Adicionado como opcional
+  savedScenarios?: any[]; 
   onSelect: (filters: any) => void;
 }
 
+// Chaves mapeadas com precisão para evitar quebra por acentuação ou caixa baixa
 const DISCIPLINE_META: Record<string, { color: string; bg: string; border: string; emoji: string }> = {
   'Língua Portuguesa': { color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30', emoji: '📝' },
   'Raciocínio Lógico': { color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/30', emoji: '🧩' },
   'Informática': { color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', emoji: '💻' },
+  'Informatica': { color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', emoji: '💻' }, // Fallback sem acento
   'Atualidades': { color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30', emoji: '🌎' },
   'Direito Constitucional': { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', emoji: '📜' },
   'Direito Administrativo': { color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30', emoji: '🏛️' },
@@ -30,52 +32,63 @@ const CAREER_LABEL: Record<string, { label: string; desc: string }> = {
   'Escrivão': { label: 'Escrivão de Polícia', desc: 'Arquivologia + Estatística' },
   'Delegado': { label: 'Delegado de Polícia', desc: 'Carreira Jurídica PC-BA' },
   'Perito': { label: 'Perito Criminal', desc: 'Medicina Legal + Conhecimentos Técnicos' },
-  
 };
 
 export const TargetSelector: React.FC<TargetSelectorProps> = ({ tags, questions, onSelect, savedScenarios = [] }) => {
   const [mode, setMode] = useState<'home' | 'career' | 'discipline'>('home');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('');
 
+  // ── MAPEAMENTO PREVENTIVO: Agrupa as disciplinas tratando espaçamentos extras da planilha ──
   const disciplineCount = useMemo(() => {
     const map: Record<string, number> = {};
-    questions.forEach(q => { if (q.discipline) map[q.discipline] = (map[q.discipline] || 0) + 1; });
+    questions.forEach(q => { 
+      if (q.discipline) {
+        // Remove espaços extras invisíveis nas pontas da string do CSV
+        const cleanedDiscipline = q.discipline.trim(); 
+        map[cleanedDiscipline] = (map[cleanedDiscipline] || 0) + 1; 
+      } 
+    });
     return map;
   }, [questions]);
 
   const careerCount = useMemo(() => {
     const map: Record<string, number> = {};
-    questions.forEach(q => { if (q.contestClass) map[q.contestClass] = (map[q.contestClass] || 0) + 1; });
+    questions.forEach(q => { 
+      if (q.contestClass) {
+        const cleanedClass = q.contestClass.trim();
+        map[cleanedClass] = (map[cleanedClass] || 0) + 1; 
+      } 
+    });
     return map;
   }, [questions]);
 
   const availableDisciplines = useMemo(() => {
-    const fromTags = (tags.disciplines || []).filter(d => (disciplineCount[d] || 0) > 0);
-    const fromBank = Object.keys(disciplineCount).filter(d => !(tags.disciplines || []).includes(d));
-    return [...fromTags, ...fromBank];
+    const rawKeys = Object.keys(disciplineCount);
+    const fromTags = (tags.disciplines || []).map(d => d.trim()).filter(d => (disciplineCount[d] || 0) > 0);
+    const fromBank = rawKeys.filter(d => !(tags.disciplines || []).map(t => t.trim()).includes(d));
+    return [...new Set([...fromTags, ...fromBank])].filter(Boolean);
   }, [tags.disciplines, disciplineCount]);
 
- const careerOptions = useMemo(() => {
-  const classes = [...new Set(questions.map(q => q.contestClass).filter(Boolean))] as string[];
-  return classes
-    .map(id => ({ 
-      id, 
-      label: CAREER_LABEL[id]?.label ?? id, 
-      desc: CAREER_LABEL[id]?.desc ?? 'Questões PC-BA', 
-      count: careerCount[id] || 0 
-    }))
-    // ── ADICIONA ESTE FILTRO AQUI: Exclui o 'Operacional' da renderização visual ──
-    .filter(c => c.count > 0 && c.id !== 'Operacional'); 
-}, [questions, careerCount]);
+  const careerOptions = useMemo(() => {
+    const classes = [...new Set(questions.map(q => q.contestClass?.trim()).filter(Boolean))] as string[];
+    return classes
+      .map(id => ({ 
+        id, 
+        label: CAREER_LABEL[id]?.label ?? id, 
+        desc: CAREER_LABEL[id]?.desc ?? 'Questões PC-BA', 
+        count: careerCount[id] || 0 
+      }))
+      // Remove o bloco 'Operacional' da renderização visual
+      .filter(c => c.count > 0 && c.id !== 'Operacional'); 
+  }, [questions, careerCount]);
 
   const availableTopics = useMemo(() => {
     if (!selectedDiscipline) return [];
     const fromTags = (tags.topics?.[selectedDiscipline]) || [];
-    const fromBank = [...new Set(questions.filter(q => q.discipline === selectedDiscipline && q.topic).map(q => q.topic as string))];
+    const fromBank = [...new Set(questions.filter(q => q.discipline?.trim() === selectedDiscipline && q.topic).map(q => q.topic!.trim()))];
     return [...new Set([...fromTags, ...fromBank])];
   }, [selectedDiscipline, tags.topics, questions]);
 
-  const maxCount = useMemo(() => Math.max(1, ...(Object.values(disciplineCount) as number[])), [disciplineCount]);
   const totalQs = questions.length;
 
   // ── HOME ──

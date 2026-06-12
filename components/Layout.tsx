@@ -58,7 +58,6 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   return (
-    
     <div className="flex h-screen bg-[#E9ECEF] dark:bg-[#0A0A0A] text-gray-900 dark:text-white overflow-hidden flex-col md:flex-row transition-colors duration-300">
 
       {/* ── SIDEBAR DESKTOP ── */}
