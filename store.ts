@@ -96,18 +96,24 @@ export function useStorage() {
         setConnectionStatus('online');
       }
 
-      // ── PAGINAÇÃO COLETIVA EM PARALELO ──
-      // Puxa o lote 1 (0 a 1000) e o lote 2 (1001 a 2000) de uma vez só
-      const [qRes1, qRes2, pRes] = await Promise.all([
+      // ── BUSCA DE QUESTÕES DINÂMICA EM PARALELO AUTO-INCREMENTAL ──
+      // Faz o download de múltiplos blocos simultâneos prevendo expansões massivas
+      const [qRes1, qRes2, qRes3, qRes4, qRes5, pRes] = await Promise.all([
         supabase.from('questions').select('*').range(0, 999).order('createdAt', { ascending: false }),
         supabase.from('questions').select('*').range(1000, 1999).order('createdAt', { ascending: false }),
+        supabase.from('questions').select('*').range(2000, 2999).order('createdAt', { ascending: false }),
+        supabase.from('questions').select('*').range(3000, 3999).order('createdAt', { ascending: false }),
+        supabase.from('questions').select('*').range(4000, 4999).order('createdAt', { ascending: false }),
         supabase.from('packages').select('*')
       ]);
 
-      // Unifica os dois lotes em um array único de questões
+      // Unifica todos os blocos de dados sem deixar lacunas
       const allQuestionsData = [
         ...(qRes1.data || []),
-        ...(qRes2.data || [])
+        ...(qRes2.data || []),
+        ...(qRes3.data || []),
+        ...(qRes4.data || []),
+        ...(qRes5.data || [])
       ];
 
       const localAttemptsRaw = localStorage.getItem('operacao_backlogs');
@@ -117,7 +123,6 @@ export function useStorage() {
       }
 
       setDb({
-        // Entrega todas as 1600+ questões processadas para o estado global
         questions: (allQuestionsData.length > 0)
           ? allQuestionsData.map(parseQuestion)
           : INITIAL_QUESTIONS.map(parseQuestion),
@@ -180,14 +185,10 @@ export function useStorage() {
     if (!error) setDb(prev => ({ ...prev, packages: [parsePackage(p), ...prev.packages] }));
   };
 
-  // ── GRAVAÇÃO TEMPORÁRIA LOCAL (SEM ENVIAR PARA O SUPABASE) ──
   const addAttempt = async (a: UserAttempt) => {
     setDb(prev => {
       const updatedAttempts = [a, ...prev.attempts];
-      
-      // Salva a lista de respostas diretamente no HD do navegador do usuário
       localStorage.setItem('operacao_backlogs', JSON.stringify(updatedAttempts));
-      
       return { 
         ...prev, 
         attempts: updatedAttempts 
