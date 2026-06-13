@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Tags, Difficulty } from '../../types';
+import { Tags, Difficulty, Question } from '../../types';
 import {
-  SlidersHorizontal, ChevronRight, Target, Calendar, Briefcase,
+  SlidersHorizontal, Target, Calendar, Briefcase,
   BookOpen, Layers, BarChart, Zap, X, Search, Check, Trash2,
-  Save, Play, Clock, EyeOff, Bookmark, Loader2, ChevronDown
+  Save, Play, EyeOff, Bookmark, Loader2, ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -63,7 +63,52 @@ export const CustomTraining: React.FC<CustomTrainingProps> = ({
   const [actionLoading, setActionLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Carrega as missões salvas na aba de histórico
+  // Mapeia sintonizadamente o lote global de questões para evitar erro ts(2322) de tipo 'unknown'
+  const activeQuestions = useMemo<Question[]>(() => {
+    return ((tags as any).questions || []) as Question[];
+  }, [tags]);
+
+  // ── MAPAS OPERACIONAIS DINÂMICOS COLETADOS DO BANCO REAL ──
+  const dynamicBoards = useMemo<string[]>(() => {
+    const list = activeQuestions.map(q => q.board?.trim()).filter(Boolean);
+    return list.length > 0 ? [...new Set(list)] as string[] : ['FCC', 'CESPE', 'FGV', 'IBFC', 'VUNESP'];
+  }, [activeQuestions]);
+
+  const dynamicYears = useMemo<string[]>(() => {
+    const list = activeQuestions.map(q => String(q.year || '').trim()).filter(Boolean);
+    return list.length > 0 ? [...new Set(list)].sort((a, b) => b.localeCompare(a)) as string[] : ['2026', '2025', '2024', '2023', '2022'];
+  }, [activeQuestions]);
+
+  const dynamicInstitutions = useMemo<string[]>(() => {
+    const list = activeQuestions.map(q => q.institution?.trim()).filter(Boolean);
+    return list.length > 0 ? [...new Set(list)] as string[] : ['PC-BA', 'PM-BA', 'TJ-BA', 'PF', 'PRF'];
+  }, [activeQuestions]);
+
+  const dynamicDisciplines = useMemo<string[]>(() => {
+    const list = activeQuestions.map(q => q.discipline?.trim()).filter(Boolean);
+    return list.length > 0 ? [...new Set(list)] as string[] : tags.disciplines || [];
+  }, [activeQuestions, tags.disciplines]);
+
+  const availableTopics = useMemo<string[]>(() => {
+    if (filters.disciplines.length === 0) return [];
+    
+    const lowerSelected = filters.disciplines.map(d => d.toLowerCase());
+    const matchedTopics = activeQuestions
+      .filter(q => q.discipline && lowerSelected.includes(q.discipline.trim().toLowerCase()) && q.topic)
+      .map(q => q.topic!.trim())
+      .filter(Boolean);
+
+    if (matchedTopics.length > 0) {
+      return [...new Set(matchedTopics)] as string[];
+    }
+
+    const topics: string[] = [];
+    filters.disciplines.forEach(d => {
+      if (tags.topics[d]) topics.push(...tags.topics[d]);
+    });
+    return [...new Set(topics)];
+  }, [filters.disciplines, activeQuestions, tags.topics]);
+
   const loadScenarios = useCallback(async () => {
     if (!userId) return;
     setLoadingScenarios(true);
@@ -163,19 +208,18 @@ export const CustomTraining: React.FC<CustomTrainingProps> = ({
       {activeTab === 'config' ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2 space-y-6">
-            {/* MultiSeletor Dinâmico de Disciplinas limpo contra lixo de espaçamentos */}
             <MultiSelectSection 
               icon={<BookOpen />} 
               label="Disciplinas" 
-              options={[...new Set((tags as any).questions?.map((q: any) => q.discipline?.trim()).filter(Boolean) || tags.disciplines || [])]} 
+              options={dynamicDisciplines} 
               selected={filters.disciplines} 
               onToggle={item => toggleItem(filters.disciplines, 'disciplines', item)} 
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <SelectSection icon={<Target />} label="Banca" value={filters.board} options={['FCC', 'CESPE', 'FGV', 'IBFC', 'VUNESP']} onChange={val => setFilters(prev => ({ ...prev, board: val }))} />
-              <SelectSection icon={<Calendar />} label="Ano" value={filters.year} options={['2026', '2025', '2024', '2023', '2022', '2021']} onChange={val => setFilters(prev => ({ ...prev, year: val }))} />
-              <SelectSection icon={<Briefcase />} label="Órgão / Instituição" value={filters.institution} options={['PC-BA', 'PM-BA', 'TJ-BA', 'PF', 'PRF']} onChange={val => setFilters(prev => ({ ...prev, institution: val }))} />
+              <SelectSection icon={<Target />} label="Banca" value={filters.board} options={dynamicBoards} onChange={val => setFilters(prev => ({ ...prev, board: val }))} />
+              <SelectSection icon={<Calendar />} label="Ano" value={filters.year} options={dynamicYears} onChange={val => setFilters(prev => ({ ...prev, year: val }))} />
+              <SelectSection icon={<Briefcase />} label="Órgão / Instituição" value={filters.institution} options={dynamicInstitutions} onChange={val => setFilters(prev => ({ ...prev, institution: val }))} />
               <SelectSection icon={<Layers />} label="Nível / Dificuldade" value={filters.difficulty} options={['Fácil', 'Médio', 'Difícil']} onChange={val => setFilters(prev => ({ ...prev, difficulty: val as Difficulty }))} />
             </div>
           </div>
@@ -250,7 +294,9 @@ const MultiSelectSection: React.FC<MultiSelectSectionProps> = ({ icon, label, op
 
   return (
     <div className={`space-y-4 ${disabled ? 'opacity-20 pointer-events-none grayscale' : ''}`}>
-      <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">{React.cloneElement(icon, { className: 'w-3.5 h-3.5' })} {label}</label>
+      <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">
+        {React.cloneElement(icon, { className: 'w-3.5 h-3.5' } as React.ComponentProps<any>)} {label}
+      </label>
       <div className="bg-white/[0.02] border border-gray-300 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-inner bg-white dark:bg-black/20">
         <div className="p-4 border-b border-gray-200 dark:border-white/5 flex items-center gap-3 bg-gray-100 dark:bg-white/5">
           <Search className="w-4 h-4 text-gray-400 dark:text-white/20" />
@@ -274,7 +320,9 @@ const SelectSection: React.FC<SelectSectionProps> = ({ icon, label, value, optio
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="space-y-3 relative">
-      <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">{React.cloneElement(icon, { className: 'w-3.5 h-3.5' })} {label}</label>
+      <label className="text-[10px] font-black uppercase text-gray-500 flex items-center gap-2 ml-2">
+        {React.cloneElement(icon, { className: 'w-3.5 h-3.5' } as React.ComponentProps<any>)} {label}
+      </label>
       <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between p-4 bg-white dark:bg-white/[0.02] border border-gray-300 dark:border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-wider text-gray-800 dark:text-white/60 hover:border-primary/50 transition-all"><span>{value || 'Todas'}</span><ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} /></button>
       {isOpen && (
         <>

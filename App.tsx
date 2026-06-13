@@ -76,7 +76,6 @@ const App: React.FC = () => {
     }
   }, [activePackageId]);
 
-  // Busca as missões recentes salvas no banco para o usuário logado
   useEffect(() => {
     if (!session?.user?.id) return;
     const fetchScenarios = async () => {
@@ -91,7 +90,6 @@ const App: React.FC = () => {
     fetchScenarios();
   }, [session, currentPage, showCustomConfig]);
 
-  // ── MOTOR DE FILTRAGEM UNIFICADO E RESTAURADO (GITHUB SYNC) ──
   const displayedQuestions = useMemo(() => {
     if (activePackageId === 'simulado_teste_info') {
       const infoQuestions = db.questions.filter((q: Question) => {
@@ -105,13 +103,11 @@ const App: React.FC = () => {
     if (selectedFilters !== null) {
       let filtered = [...db.questions];
 
-      // Filtro por Disciplina Única (Cliques rápidos na Home - Singular)
       if (selectedFilters.discipline && selectedFilters.discipline.trim() !== '') {
         const targetDisc = selectedFilters.discipline.trim().toLowerCase();
         filtered = filtered.filter((q: Question) => q.discipline?.trim().toLowerCase() === targetDisc);
       }
 
-      // Filtro por Múltiplas Disciplinas (Vindo do CustomTraining - Array Plural)
       if (selectedFilters.disciplines && Array.isArray(selectedFilters.disciplines) && selectedFilters.disciplines.length > 0) {
         const cleanedSelected = selectedFilters.disciplines.map((d: string) => d.trim().toLowerCase());
         filtered = filtered.filter((q: Question) => {
@@ -120,7 +116,6 @@ const App: React.FC = () => {
         });
       }
 
-      // Filtro por Tópicos Múltiplos ou Único (Vindo do CustomTraining)
       if (selectedFilters.topics && Array.isArray(selectedFilters.topics) && selectedFilters.topics.length > 0) {
         const cleanedTopics = selectedFilters.topics.map((t: string) => t.trim().toLowerCase());
         filtered = filtered.filter((q: Question) => {
@@ -133,37 +128,31 @@ const App: React.FC = () => {
         filtered = filtered.filter((q: Question) => q.topic?.trim().toLowerCase() === targetTopic);
       }
 
-      // Filtro por Carreira / Classe de Concurso
       if (selectedFilters.contestClass && selectedFilters.contestClass.trim() !== '') {
         const targetClass = selectedFilters.contestClass.trim().toLowerCase();
         filtered = filtered.filter((q: Question) => q.contestClass?.trim().toLowerCase() === targetClass);
       }
 
-      // Filtro por Banca (Ignora strings vazias "" de "Todas")
       if (selectedFilters.board && selectedFilters.board.trim() !== '') {
         const targetBoard = selectedFilters.board.trim().toLowerCase();
         filtered = filtered.filter((q: Question) => q.board?.trim().toLowerCase() === targetBoard);
       }
 
-      // Filtro por Ano (Seguro contra tipos text/number)
       if (selectedFilters.year && String(selectedFilters.year).trim() !== '') {
         const targetYear = String(selectedFilters.year).trim();
         filtered = filtered.filter((q: Question) => String(q.year).trim() === targetYear);
       }
 
-      // Filtro por Dificuldade
       if (selectedFilters.difficulty && selectedFilters.difficulty.trim() !== '') {
         const targetDiff = selectedFilters.difficulty.trim().toLowerCase();
         filtered = filtered.filter((q: Question) => q.difficulty?.trim().toLowerCase() === targetDiff);
       }
 
-      // Filtro por Órgão / Instituição
       if (selectedFilters.institution && selectedFilters.institution.trim() !== '') {
         const targetInst = selectedFilters.institution.trim().toLowerCase();
         filtered = filtered.filter((q: Question) => q.institution?.trim().toLowerCase() === targetInst);
       }
 
-      // Filtro Ocultar Respondidas (Histórico Inédito)
       if ((selectedFilters.hideAnswered || selectedFilters.answeredQuestionIds) && selectedFilters.answeredQuestionIds?.length > 0) {
         const answeredIds = selectedFilters.answeredQuestionIds.map((id: any) => String(id));
         filtered = filtered.filter((q: Question) => !answeredIds.includes(String(q.id)));
@@ -232,7 +221,7 @@ const App: React.FC = () => {
           <TargetSelector
             tags={db.tags}
             questions={db.questions}
-            savedScenarios={savedScenarios} // Mostra as missões pretas salvas na Home
+            savedScenarios={savedScenarios} 
             onSelect={(f: any) => f.isCustom ? setShowCustomConfig(true) : setSelectedFilters(f)}
           />
         );
@@ -240,9 +229,12 @@ const App: React.FC = () => {
       if (showCustomConfig && !selectedFilters) {
         return (
           <CustomTraining
-            tags={db.tags}
-            userId={session?.user?.id} // Injeta o ID do usuário logado para habilitar salvamento
-            answeredQuestionIds={userAttempts.map(a => String(a.questionId))} // Repassa os IDs respondidos
+            tags={{
+              ...db.tags,
+              questions: db.questions as any // ← EXTRA: Injeta a lista total para leitura dinâmica
+            }}
+            userId={session?.user?.id} 
+            answeredQuestionIds={userAttempts.map(a => String(a.questionId))} 
             onStart={(f: any) => setSelectedFilters(f)}
             onCancel={() => setShowCustomConfig(false)}
           />
