@@ -47,12 +47,76 @@ const App: React.FC = () => {
     );
   }, [db.attempts, session?.user?.id]);
 
+  // ── VALIDAÇÃO ATUALIZADA: SUPORTE A 3 DIAS DE TESTE GRATUITO ──
   const checkPaymentStatus = async (user: any) => {
     try {
-      const { data } = await supabase.from('profiles').select('is_paid').eq('id', user.id).maybeSingle();
-      setIsPaid(data ? data.is_paid : true);
-    } catch { setIsPaid(true); }
+      // Busca o status de pago e a data de expiração do teste
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_paid, trial_expires_at')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (data) {
+        // Se o usuário já pagou, acesso liberado direto
+        if (data.is_paid) {
+          setIsPaid(true);
+          return;
+        }
+
+        // Se ele tem uma data de expiração de teste, verifica se ainda é válida
+        if (data.trial_expires_at) {
+          const expireDate = new Date(data.trial_expires_at).getTime();
+          const now = Date.now();
+          
+          if (now < expireDate) {
+            setIsPaid(true); // Teste ainda ativo!
+            return;
+          }
+        }
+      }
+
+      // Se caiu aqui e a URL tem o link de convite do teste, ativa os 3 dias para ele
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('trial') === 'true') {
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+
+        // Atualiza o banco dando 3 dias de acesso
+        await supabase
+          .from('profiles')
+          .upsert({ 
+            id: user.id, 
+            trial_expires_at: threeDaysFromNow.toISOString() 
+          });
+
+        setIsPaid(true);
+        // Limpa a URL para ficar estético
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      // Caso contrário, bloqueia na tela de pagamento
+      setIsPaid(false);
+    } catch (e) {
+      // Em caso de falha crítica na requisição, deixa o fallback seguro
+      setIsPaid(false);
+    }
   };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) checkPaymentStatus(session.user);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+      setSession(session);
+      if (session?.user) checkPaymentStatus(session.user);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
