@@ -36,11 +36,9 @@ export const PDFUploader: React.FC<PDFUploaderProps> = ({ tags, onQuestionsExtra
         const questions = await aiService.processPDF(base64, board, institution, year);
         onQuestionsExtracted(questions);
         setFile(null);
-        alert(`${questions.length} questões extraídas e indexadas com sucesso!`);
       };
     } catch (error) {
       console.error(error);
-      alert('Erro ao processar PDF. Verifique sua chave API e o formato do arquivo.');
     } finally {
       setIsProcessing(false);
     }

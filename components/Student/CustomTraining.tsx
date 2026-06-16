@@ -162,10 +162,8 @@ export const CustomTraining: React.FC<CustomTrainingProps> = ({
       setScenarioTitle('');
       setIsSaving(false);
       await loadScenarios();
-      alert('Missão operacional salva com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar cenário:', error);
-      alert('Falha ao registrar missão.');
     } finally {
       setActionLoading(false);
     }

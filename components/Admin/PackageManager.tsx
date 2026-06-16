@@ -31,7 +31,6 @@ export const PackageManager: React.FC<PackageManagerProps> = ({ tags, questions,
 
   const handleSave = () => {
     if (!name || selectedIds.length === 0) {
-      alert('Atenção: Nome do pacote e seleção de questões são obrigatórios!');
       return;
     }
     const pkg: QuestionPackage = {
@@ -45,7 +44,6 @@ export const PackageManager: React.FC<PackageManagerProps> = ({ tags, questions,
     setName('');
     setDescription('');
     setSelectedIds([]);
-    alert('Pacote estratégico publicado com sucesso!');
   };
 
   return (

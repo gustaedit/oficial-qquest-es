@@ -50,7 +50,6 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({ tags, onSave, initia
 
   const handleSubmit = () => {
     if (!text || options.some(o => !o.text)) {
-      alert('Preencha o enunciado e todas as alternativas!');
       return;
     }
 
